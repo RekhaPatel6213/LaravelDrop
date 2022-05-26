@@ -1,0 +1,137 @@
+version: '3.8'
+services:
+    #PHP Service
+    laravel_app:
+        build:
+            context: .
+            dockerfile: ./docker/php/Dockerfile
+        container_name: laraveldropapi
+        restart: unless-stopped
+        tty: true
+
+        environment:
+            SERVICE_TAGS: dev
+            SERVICE_NAME: laraveldropapi
+        working_dir: /var/www
+        user: "$UserID:$GroupID"
+        expose:
+          - "9000"
+        command: ["php-fpm"]
+        volumes:
+          - ./:/var/www
+          - laraveldrop-composer-cache:/root/composer/
+          - larveldrop-tikner:/.config:rw
+          - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+        networks:
+          - laraveldropnet
+    # Nginx Web Service
+    web:
+        image: nginx:latest
+        container_name: laraveldropserver
+        restart: unless-stopped
+        tty: true
+        expose:
+          - "80"
+        ports:
+          - "8080:80"
+        volumes:
+          - ./:/var/www
+          - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+        networks:
+          - laraveldropnet
+    # Mysql Database service
+    db:
+        image: mysql:8.0
+        restart: unless-stopped
+        container_name: laraveldropdb
+        tty: true
+
+        environment:
+            MYSQL_DATABASE: 'new_drop'
+            # So you don't have to use root, but you can if you like
+            MYSQL_USER: 'laraveldropuser'
+            # You can use whatever password you like
+            MYSQL_PASSWORD: 'laraveldrop@123'
+            # Password for root access
+            MYSQL_ROOT_PASSWORD: 'drop123#'
+            SERVICE_TAGS: dev
+            SERVICE_NAME: mysql
+        ports:
+            # <Port exposed> : < MySQL Port running inside container>
+            - '3308:3306'
+        expose:
+            # Opens port 3306 on the container
+            - '3306'
+            # Where our data will be persisted
+        volumes:
+            - laraveldrop-db:/var/lib/mysql
+            - ./docker/mysql/my.cnf:/etc/mysql/my.cnf
+            - ./docker/mysql/1.sql:/etc/mysql/1.sql
+            - ./docker/mysql/mysql-files:/var/lib/mysql-files/
+        networks:
+            - laraveldropnet
+    # Redis service
+    redis:
+        image: 'bitnami/redis:6.0'
+        container_name: laraveldropredis
+        restart: unless-stopped
+        tty: true
+
+        environment:
+          ALLOW_EMPTY_PASSWORD: "yes"
+          SERVICE_TAGS: dev
+          SERVICE_NAME: redis
+        expose:
+          - '6379'
+        volumes:
+          - laraveldrop-redis:/bitnami/redis/data
+        networks:
+          - laraveldropnet
+    # MongoDB service
+    mongodb:
+        image: mongo:latest
+        restart: unless-stopped
+        container_name: laraveldropmongodb
+        tty: true
+
+        environment:
+          MONGO_INITDB_ROOT_USERNAME: 'laraveldropuser'
+          MONGO_INITDB_ROOT_PASSWORD: 'laraveldrop123#'
+          SERVICE_TAGS: dev
+          SERVICE_NAME: mongodb
+        ports:
+          # <Port exposed> : < MySQL Port running inside container>
+          - '49999:27017'
+        expose:
+          # Opens port 27017 on the container
+          - '27017'
+          # Where our data will be persisted
+        volumes:
+          - laraveldrop-mongodb:/data/db
+        networks:
+          - laraveldropnet
+    # Worker process manager
+    supervisor:
+        build:
+            context: .
+            dockerfile: ./docker/supervisor/Dockerfile
+        container_name: laraveldropsupervisor
+        restart: unless-stopped
+        tty: true
+        volumes:
+          - ./:/var/www
+          - ./docker/supervisor/conf.d:/etc/supervisor/conf.d
+          - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+        networks:
+          - laraveldropnet
+#Docker Networks
+networks:
+    laraveldropnet:
+       driver: bridge
+# Names our volume       
+volumes:
+    laraveldrop-composer-cache:
+    larveldrop-tikner:
+    laraveldrop-db:
+    laraveldrop-redis:
+    laraveldrop-mongodb:
